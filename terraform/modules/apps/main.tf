@@ -14,6 +14,17 @@ resource "kubernetes_namespace_v1" "flowhawk" {
   }
 }
 
+# The backup bucket's keys, for clouds where ClickHouse has no identity of its own (Google Cloud's HMAC key, Azure's
+# storage account key). The flowhawk-clickstack chart reads them from here.
+resource "kubernetes_secret_v1" "backup" {
+  count = var.backup != null && length(nonsensitive(keys(var.backup_credentials))) > 0 ? 1 : 0
+  metadata {
+    name      = "flowhawk-backup"
+    namespace = kubernetes_namespace_v1.flowhawk.metadata[0].name
+  }
+  data = var.backup_credentials
+}
+
 resource "helm_release" "ingress_nginx" {
   name             = "ingress-nginx"
   namespace        = "ingress-nginx"
@@ -58,9 +69,16 @@ resource "helm_release" "agent" {
     collectorHost = var.collector_host
     acmeEmail     = var.acme_email
     image         = var.agent_image_tag == "" ? {} : { tag = var.agent_image_tag }
-    clickstack = {
-      clickhouse = merge({ storage = "${var.clickhouse_storage_gb}Gi" }, var.storage_class == "" ? {} : { storageClass = var.storage_class })
-    }
+    clickstack = merge(
+      { clickhouse = merge({
+        storage = "${var.clickhouse_storage_gb}Gi"
+        resources = {
+          requests = { cpu = tostring(var.clickhouse_cpu), memory = "${var.clickhouse_memory_gb}Gi" }
+          limits   = { memory = "${var.clickhouse_memory_gb}Gi" }
+        }
+      }, var.storage_class == "" ? {} : { storageClass = var.storage_class }) },
+      var.backup == null ? {} : { backup = merge({ enabled = true }, var.backup, length(kubernetes_secret_v1.backup) > 0 ? { credentialsSecret = "flowhawk-backup" } : {}) },
+    )
   })]
   set_sensitive = [
     { name = "agentToken", value = var.agent_token },

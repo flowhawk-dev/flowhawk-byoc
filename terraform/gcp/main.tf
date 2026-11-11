@@ -93,8 +93,14 @@ resource "google_container_node_pool" "flowhawk" {
   name     = "flowhawk"
   cluster  = google_container_cluster.flowhawk.id
   location = var.region
-  # A regional cluster puts this many nodes in each of its zones.
-  node_count = max(1, ceil(var.node_count / 3))
+  # A regional cluster puts this many nodes in each of its zones; the autoscaler adds nodes, up to node_count_max in
+  # all, when pods (more collectors) don't fit.
+  initial_node_count = max(1, ceil(var.node_count / 3))
+  autoscaling {
+    total_min_node_count = var.node_count
+    total_max_node_count = max(var.node_count, var.node_count_max)
+    location_policy      = "BALANCED"
+  }
   node_config {
     machine_type = var.node_size
     disk_size_gb = 50
@@ -141,6 +147,39 @@ resource "kubernetes_storage_class_v1" "balanced" {
   depends_on             = [google_container_node_pool.flowhawk]
 }
 
+# Nightly backups (backup_days): a private bucket that deletes backups a week after backup_days, written by a service
+# account allowed this bucket only, through Cloud Storage's S3 interface with an HMAC key (ClickHouse speaks S3).
+resource "google_storage_bucket" "backups" {
+  count                       = var.backup_days > 0 ? 1 : 0
+  name                        = "${var.cluster_name}-backups-${substr(md5("${var.project}/${var.deployment_id}"), 0, 10)}"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  lifecycle_rule {
+    condition { age = var.backup_days + 7 }
+    action { type = "Delete" }
+  }
+  lifecycle_rule {
+    condition { age = 2 }
+    action { type = "AbortIncompleteMultipartUpload" }
+  }
+}
+resource "google_service_account" "backups" {
+  count        = var.backup_days > 0 ? 1 : 0
+  account_id   = "${substr(var.cluster_name, 0, 20)}-backups"
+  display_name = "Flowhawk ClickHouse backups"
+}
+resource "google_storage_bucket_iam_member" "backups" {
+  count  = var.backup_days > 0 ? 1 : 0
+  bucket = google_storage_bucket.backups[0].name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.backups[0].email}"
+}
+resource "google_storage_hmac_key" "backups" {
+  count                 = var.backup_days > 0 ? 1 : 0
+  service_account_email = google_service_account.backups[0].email
+}
+
 module "apps" {
   source                = "../modules/apps"
   deployment_id         = var.deployment_id
@@ -152,8 +191,19 @@ module "apps" {
   acme_email            = var.acme_email
   storage_class         = kubernetes_storage_class_v1.balanced.metadata[0].name
   clickhouse_storage_gb = var.clickhouse_storage_gb
+  clickhouse_cpu        = var.clickhouse_cpu
+  clickhouse_memory_gb  = var.clickhouse_memory_gb
   agent_image_tag       = var.agent_image_tag
-  depends_on            = [google_container_node_pool.flowhawk]
+  backup = var.backup_days == 0 ? null : {
+    kind     = "s3"
+    endpoint = "https://storage.googleapis.com/${google_storage_bucket.backups[0].name}/flowhawk/"
+    keepDays = var.backup_days
+  }
+  backup_credentials = var.backup_days == 0 ? {} : {
+    "access-key-id"     = google_storage_hmac_key.backups[0].access_id
+    "secret-access-key" = google_storage_hmac_key.backups[0].secret
+  }
+  depends_on = [google_container_node_pool.flowhawk, google_storage_bucket_iam_member.backups]
 }
 
 output "collector_ingress_address" {
@@ -161,4 +211,8 @@ output "collector_ingress_address" {
   value       = module.apps.collector_ingress_address
 }
 output "cluster_name" { value = google_container_cluster.flowhawk.name }
+output "backup_bucket" {
+  description = "Where ClickHouse's nightly backups go (empty when backup_days is 0)."
+  value       = var.backup_days > 0 ? google_storage_bucket.backups[0].name : ""
+}
 output "kubeconfig_command" { value = "gcloud container clusters get-credentials ${google_container_cluster.flowhawk.name} --region ${var.region} --project ${var.project}" }

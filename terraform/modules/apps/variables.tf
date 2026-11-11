@@ -20,6 +20,14 @@ variable "storage_class" {
   default = ""
 }
 variable "clickhouse_storage_gb" { type = number }
+variable "clickhouse_cpu" {
+  type    = number
+  default = 2
+}
+variable "clickhouse_memory_gb" {
+  type    = number
+  default = 8
+}
 variable "agent_image_tag" {
   type    = string
   default = ""
@@ -37,6 +45,18 @@ variable "cert_manager_version" {
   default = "v1.19.1"
 }
 
+variable "backup" {
+  description = "Nightly backups: the flowhawk-clickstack chart's backup block (kind, endpoint, container, serviceAccountAnnotations, keepDays). Null: off."
+  type        = any
+  default     = null
+}
+variable "backup_credentials" {
+  description = "Keys for the backup bucket when the cloud gives ClickHouse no identity of its own: a secret in the namespace."
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+}
+
 variable "agent_chart_repo" {
   type    = string
   default = "oci://ghcr.io/flowhawk-dev/charts"
@@ -45,7 +65,7 @@ variable "agent_chart_repo" {
 variable "agent_chart_version" {
   description = "The flowhawk-agent chart version; the same as this module's release tag."
   type        = string
-  default     = "0.1.0"
+  default     = "0.1.1"
 }
 
 variable "agent_chart_path" {

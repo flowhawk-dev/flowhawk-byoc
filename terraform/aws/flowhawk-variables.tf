@@ -58,3 +58,27 @@ variable "agent_image_tag" {
   type        = string
   default     = ""
 }
+variable "backup_days" {
+  description = "Nightly ClickHouse backups to a bucket in this account, kept this many days (a weekly full backup and daily incremental ones). 0 turns them off."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.backup_days == 0 || (var.backup_days >= 7 && var.backup_days <= 365)
+    error_message = "backup_days is 0 (off) or 7 to 365."
+  }
+}
+variable "node_count_max" {
+  description = "Most nodes the cluster grows to when the collectors scale out (node autoscaling); at least node_count."
+  type        = number
+  default     = 6
+}
+variable "clickhouse_cpu" {
+  description = "CPU cores reserved for ClickHouse. Raise it (and node_size) as ingest and queries grow."
+  type        = number
+  default     = 2
+}
+variable "clickhouse_memory_gb" {
+  description = "Memory for ClickHouse, in GiB; it needs a node with this much free."
+  type        = number
+  default     = 8
+}
