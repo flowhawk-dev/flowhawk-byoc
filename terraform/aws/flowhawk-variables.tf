@@ -40,6 +40,15 @@ variable "support_principal" {
   type        = string
   default     = ""
 }
+variable "api_allowed_cidrs" {
+  description = "Addresses that may reach the cluster's Kubernetes API, as CIDRs. The default leaves it open to the internet (still behind your cloud's sign-in); narrow it to your office or CI runner's range. Flowhawk itself never calls this API: the agent runs inside the cluster. Whoever runs Terraform must be inside these ranges."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+  validation {
+    condition     = length(var.api_allowed_cidrs) > 0 && alltrue([for c in var.api_allowed_cidrs : can(cidrhost(c, 0))])
+    error_message = "api_allowed_cidrs is a non-empty list of CIDRs, like [\"203.0.113.0/24\"]."
+  }
+}
 variable "cluster_name" {
   type    = string
   default = "flowhawk"

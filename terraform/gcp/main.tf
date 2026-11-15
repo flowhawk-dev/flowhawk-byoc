@@ -83,6 +83,16 @@ resource "google_container_cluster" "flowhawk" {
     enable_private_endpoint = false
     master_ipv4_cidr_block  = "172.16.42.0/28"
   }
+  # Who may reach the Kubernetes API: left out when it is open to everyone (GKE's default).
+  dynamic "master_authorized_networks_config" {
+    for_each = contains(var.api_allowed_cidrs, "0.0.0.0/0") ? [] : [1]
+    content {
+      dynamic "cidr_blocks" {
+        for_each = var.api_allowed_cidrs
+        content { cidr_block = cidr_blocks.value }
+      }
+    }
+  }
   # NetworkPolicy (charts/flowhawk-clickstack) needs Dataplane V2.
   datapath_provider = "ADVANCED_DATAPATH"
   release_channel { channel = "REGULAR" }
