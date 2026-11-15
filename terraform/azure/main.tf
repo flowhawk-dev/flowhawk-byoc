@@ -71,6 +71,11 @@ resource "azurerm_kubernetes_cluster" "flowhawk" {
     zones                       = length(local.zones) > 0 ? local.zones : null
     temporary_name_for_rotation = "flowhawktmp"
   }
+  # Who may reach the Kubernetes API: left out when it is open to everyone (AKS's default).
+  dynamic "api_server_access_profile" {
+    for_each = contains(var.api_allowed_cidrs, "0.0.0.0/0") ? [] : [1]
+    content { authorized_ip_ranges = var.api_allowed_cidrs }
+  }
   identity { type = "SystemAssigned" }
   # Manual: this node pool only, no node autoprovisioning.
   node_provisioning_profile { mode = "Manual" }

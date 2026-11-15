@@ -65,7 +65,7 @@ variable "agent_chart_repo" {
 variable "agent_chart_version" {
   description = "The flowhawk-agent chart version; the same as this module's release tag."
   type        = string
-  default     = "0.1.1"
+  default     = "0.1.2"
 }
 
 variable "agent_chart_path" {

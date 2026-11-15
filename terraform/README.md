@@ -21,7 +21,7 @@ variable "flowhawk_agent_token" { sensitive = true }
 variable "flowhawk_ingest_key" { sensitive = true }
 
 module "flowhawk_byoc" {
-  source = "github.com/flowhawk-dev/flowhawk-byoc//terraform/aws?ref=v0.1.1"
+  source = "github.com/flowhawk-dev/flowhawk-byoc//terraform/aws?ref=v0.1.2"
 
   region        = "eu-central-1"
   account_id    = "123456789012"
