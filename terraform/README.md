@@ -44,6 +44,10 @@ one is ignored). ClickHouse is a single replica: its disk is zonal, so if its zo
 After `terraform apply`, point `collector_host` at `collector_ingress_address` (a CNAME on AWS, an A record on Google
 Cloud and Azure). Settings > Storage shows what the agent waits for until the cluster is running.
 
+**Who reaches the cluster's Kubernetes API** (`api_allowed_cidrs`, default `["0.0.0.0/0"]`): open to the internet by
+default, still behind your cloud's own sign-in. Narrow it to your office or CI runner's ranges; whoever runs Terraform
+must be inside them. Flowhawk never calls this API: the agent runs inside the cluster.
+
 **Support access** (`support_principal`, optional and read-only): on AWS an IAM role ARN with an EKS access entry for
 `AmazonEKSViewPolicy`; on Google Cloud a member (`group:...` or `serviceAccount:...`) with `roles/container.viewer`; on
 Azure an object id with the AKS RBAC Reader and Cluster User roles on this cluster only. Leave it out to keep Flowhawk
